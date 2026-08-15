@@ -25,6 +25,7 @@ AUTH_FILES = [
 ]
 
 DELETE_BATCH_SIZE = 50
+DRY_RUN = "--dry-run" in sys.argv
 
 
 # ============================================================
@@ -101,9 +102,27 @@ def load_ytmusic():
 
 
 def pause():
-    input("\nPress Enter to continue...")
-
-
+    print(chr(10) + "Press Enter to continue...")
+    print("Press C to cancel.")
+    try:
+        import termios
+        import tty
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(fd)
+            while True:
+                key = sys.stdin.read(1)
+                if key in ("c", "C"):
+                    print(chr(10) + "Cancelled.")
+                    return False
+                if key in (chr(10), chr(13)):
+                    return True
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    except (ImportError, termios.error, OSError):
+        choice = input()
+        return choice.strip().lower() != "c"
 def print_song(song, position=None):
     title = song.get("title", "Unknown title")
     artists = song.get("artists", [])
@@ -246,17 +265,65 @@ def confirm_delete(songs, description):
         print_song(song, pos)
 
     print("\n" + "-" * 72)
-    print("THIS WILL MODIFY YOUR YOUTUBE MUSIC PLAYLIST.")
-    print("Type DELETE exactly to continue.")
+    print("DRY RUN ACTIVE - NO CHANGES WILL BE MADE." if DRY_RUN else "THIS WILL MODIFY YOUR YOUTUBE MUSIC PLAYLIST.")
+    print("Type DELETE to simulate this operation." if DRY_RUN else "Type DELETE to continue.")
     print("Anything else cancels.")
     print("-" * 72)
 
     answer = input("\nConfirmation: ").strip()
 
-    return answer == "DELETE"
+    return answer.strip().upper() == "DELETE"
+
+
+def create_playlist_backup(yt, playlist_id, playlist=None, tracks=None):
+    if DRY_RUN:
+        return None
+
+    try:
+        if playlist is None or tracks is None:
+            playlist = yt.get_playlist(
+                playlist_id,
+                limit=None,
+                related=False,
+                suggestions_limit=0,
+            )
+            tracks = playlist.get("tracks", [])
+
+        backup_dir = Path("backups")
+        backup_dir.mkdir(parents=True, exist_ok=True)
+
+        title = str((playlist or {}).get("title", "playlist"))
+        safe_title = re.sub(r"[^A-Za-z0-9._-]+", "_", title).strip("._") or "playlist"
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        backup_path = backup_dir / f"{safe_title}_{timestamp}.json"
+
+        backup = {
+            "playlistId": playlist_id,
+            "title": title,
+            "timestamp": timestamp,
+            "tracks": tracks,
+        }
+
+        with backup_path.open("w", encoding="utf-8") as f:
+            json.dump(backup, f, indent=2, ensure_ascii=False)
+
+        print(f"\nBACKUP CREATED: {backup_path}")
+        print(f"Songs backed up: {len(tracks)}")
+        return backup_path
+
+    except Exception as e:
+        print("\nERROR: Could not create playlist backup.")
+        print(type(e).__name__, str(e))
+        print("Operation cancelled for safety.")
+        return False
 
 
 def perform_delete(yt, playlist_id, songs):
+    if DRY_RUN:
+        print(f"\nDRY RUN: Would remove {len(songs)} song(s).")
+        print("NO CHANGES HAVE BEEN MADE.")
+        return True
+
     if not songs:
         print("\nNothing to delete.")
         return False
@@ -277,6 +344,10 @@ def perform_delete(yt, playlist_id, songs):
 
     if not items:
         print("\nERROR: No removable playlist items were found.")
+        return False
+
+    backup = create_playlist_backup(yt, playlist_id)
+    if backup is False:
         return False
 
     print(f"\nRemoving {len(items)} songs...")
@@ -594,6 +665,12 @@ def delete_after_song(yt, playlist_id, tracks):
 
 
 def delete_full_playlist(yt, playlist):
+    if DRY_RUN:
+        print(f"\nDRY RUN: Would delete playlist: {playlist.get('title', 'Untitled')}")
+        print("NO CHANGES HAVE BEEN MADE.")
+        pause()
+        return True
+
     playlist_id = playlist["playlistId"]
     title = playlist.get("title", "Untitled")
 
@@ -612,6 +689,11 @@ def delete_full_playlist(yt, playlist):
         pause()
         return False
 
+    backup = create_playlist_backup(yt, playlist_id)
+    if backup is False:
+        pause()
+        return False
+
     try:
         yt.delete_playlist(playlist_id)
         print(f"\nSUCCESS: '{title}' has been deleted.")
@@ -625,6 +707,12 @@ def delete_full_playlist(yt, playlist):
 
 
 def merge_playlists(yt, playlist_id, tracks):
+    if DRY_RUN:
+        print("\nDRY RUN: Merge operation selected.")
+        print("NO CHANGES HAVE BEEN MADE.")
+        pause()
+        return
+
     print("\n" + "=" * 72)
     print("                       MERGE PLAYLISTS")
     print("=" * 72)
@@ -671,8 +759,13 @@ def merge_playlists(yt, playlist_id, tracks):
 
     answer = input("\nType MERGE to confirm: ").strip()
 
-    if answer != "MERGE":
+    if answer.strip().upper() != "MERGE":
         print("\nCancelled.")
+        pause()
+        return
+
+    backup = create_playlist_backup(yt, playlist_id, tracks=tracks)
+    if backup is False:
         pause()
         return
 
