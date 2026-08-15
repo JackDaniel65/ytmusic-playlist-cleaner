@@ -2,90 +2,149 @@
 
 ## 1. Clone the repository
 
-Use the repository clone command from the GitHub repository.
+git clone https://github.com/JackDaniel65/ytmusic-playlist-cleaner.git
+cd ytmusic-playlist-cleaner
 
 ## 2. Create the virtual environment
 
-Create and activate the Python venv:
-
-``` bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-```
 
-## 3. YouTube Music authentication setup
+## 3. Authentication
 
-The program requires your own YouTube Music browser authentication. Every user must configure their own local `browser.json`.
+The application looks for these local authentication files:
 
-Step-by-step browser process:
+1. browser_clean.json
+2. browser.json
 
-1. Open https://music.youtube.com/ and log in.
-2. Press ``ctl + shift + `` `I` html manager Developer Tools.
-3. Click the ``Network`` tab.
-4. In the Network filter box, type `browse`.
-5. If available, select Fetch/XHRO to simplify the request list.
-6. Keep Developer Tools open and go back to YouTube Music.
-7. Open Library > Playlists and open the playlist you want to use.
-8. Look for the request with the path ``/youtube/i1/tbrowse?prettyPrint=false``.
-9. Select the latest relevant `browse` that was generated while loading the playlist or library.
-10-. DO NOT select ``/youtube/i1/att/get?prettyPrint=false``. That is a different request.
-11. With the correct `browse` request selected, click ``Headers`` on the right.
-12. Scroll to `Request Headers`.
-13. Confirm that the headers include the authentication fields required by the example file.
-14. Copy the request header data and use it only for your local configuration.
+Do not share these files.
 
-## 4. Create browser.json
+## 4. Test authentication safely
 
-From the project directory:
+Run the application in dry-run mode first:
 
-``` bash
-cp browser.example.json browser.json
-nano browser.json
-```
+python3 clean_playlist.py --dry-run
 
-Use `browser.example.json` as the structure reference and configure the file with your own authentication data.
+Dry-run mode allows playlists and songs to be inspected without modifying YouTube Music.
 
-## 5. Security
+## 5. Live mode
 
-This authentication data can be sensitive. Do NOT share or upload your real `browser.json` or `browser_clean.json` to GitHb.
+When you are ready to make real playlist changes:
 
-These files are intentionally ignored by Git. Verify with:
-
-```bash
-git check-ignore -v browser.json
-```
-
-## 6. Run the project
-
-```bash
-source venv/bin/activate
 python3 clean_playlist.py
-```
 
-## 7. Features
+Live mode can modify your YouTube Music playlists.
 
-The program supports:
+## 6. Playlist operations
 
-- Selecting a playlist by number or name.
-- Scanning and showing the total song count.
-- Deleting a range of positions, for example 125-230.
-- Deleting specific positions.
-- Finding a song by name.
-- Confirming the song name and position before deleting by name.
-- Deleting everything between two song names.
-- Deleting everything after a selected song.
-- Previewing the changes before deletion.
-- Requiring explicit confirmation before destructive changes.
+1. Delete songs by range
+2. Delete songs between two song names
+3. Delete specific songs by number
+4. Delete song by name
+5. Remove EVERYTHING after a song
+8. Merge two playlists
+9. Delete ENTIRE playlist
 
-## 8. Authentication errors
+## 7. Browse
 
-If authentication stops working or the program returns HTTP 400 / JSON decoding errors, use the same Network process above to obtain fresh local authentication and update only your copy of `browser.json`.
+6. Search songs
+7. Show first 25 songs
 
-## 9. Short workflow
+## 8. Backup and restore
 
-#** Clone -> venv -> pip install -> browser authentication -> configure beased on example -> run cleaner.
+10. List backups
+11. Preview backup
+12. Create manual backup
+13. Restore backup
 
-## Security reminder
+Backups are stored locally in:
 
-Never commit or share your local authentication files.
+backups/
+
+Destructive operations create a safety backup before making the API mutation.
+
+If a required safety backup cannot be created, the operation is cancelled.
+
+## 9. Manual backup
+
+Select:
+
+12. Create manual backup
+
+This creates an explicit backup of the selected playlist before making changes.
+
+## 10. Backup listing and preview
+
+Use:
+
+10. List backups
+
+to see available backups, including playlist name, song count, creation time, filename, and backup contents.
+
+Use:
+
+11. Preview backup
+
+to inspect a selected backup and its songs.
+
+## 11. Restore backup
+
+Select:
+
+13. Restore backup
+
+The restore process:
+
+1. Selects an existing backup.
+2. Displays its contents.
+3. Reads the current playlist.
+4. Requires RESTORE confirmation.
+5. Creates a safety backup of the current playlist.
+6. Removes the current playlist contents.
+7. Adds the songs stored in the selected backup.
+
+If the safety backup fails, the restore operation is cancelled.
+
+A backup is restored to the playlist ID stored inside that backup.
+
+## 12. Dry-run mode
+
+Run:
+
+python3 clean_playlist.py --dry-run
+
+Dry-run mode prevents playlist mutations.
+
+Delete operations show what would happen instead of changing YouTube Music.
+
+Manual backup creation and restore are also prevented from making changes while dry-run mode is active.
+
+## 13. Security
+
+Never commit or share:
+
+browser.json
+browser_clean.json
+
+The backups/ directory is also ignored by Git.
+
+Backups may contain playlist information and should be treated as local/private data.
+
+## 14. Recommended workflow
+
+1. Configure authentication.
+2. Run python3 clean_playlist.py --dry-run.
+3. Inspect your playlists.
+4. Create a manual backup.
+5. Perform a small live operation.
+6. Verify the result.
+7. Keep important backups until the changes are confirmed.
+
+## 15. Troubleshooting
+
+If authentication fails, refresh the local browser authentication configuration and test again with:
+
+python3 clean_playlist.py --dry-run
+
+Never upload authentication cookies, authorization headers, tokens, or other private credentials to GitHub.
