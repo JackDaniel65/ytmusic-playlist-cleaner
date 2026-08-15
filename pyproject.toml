@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ytmusic-playlist-cleaner"
+version = "0.1.0"
+description = "A tool for cleaning YouTube Music playlists by removing tracks after a selected song."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "ytmusicapi"
+]
+
+[project.urls]
+Repository = "https://github.com/YOUR_USERNAME/ytmusic-playlist-cleaner"
