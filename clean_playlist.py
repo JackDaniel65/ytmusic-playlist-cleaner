@@ -266,7 +266,7 @@ def confirm_delete(songs, description):
 
     print("\n" + "-" * 72)
     print("DRY RUN ACTIVE - NO CHANGES WILL BE MADE." if DRY_RUN else "THIS WILL MODIFY YOUR YOUTUBE MUSIC PLAYLIST.")
-    print("Type DELETE to simulate this operation." if DRY_RUN else "Type DELETE to continue.")
+    print("Type DELETE to preview the operation." if DRY_RUN else "Type DELETE to continue.")
     print("Anything else cancels.")
     print("-" * 72)
 
@@ -1246,22 +1246,42 @@ def print_main_menu():
     print("\n" + "=" * 72)
     print("                 YOUTUBE MUSIC PLAYLIST CLEANER")
     print("=" * 72)
-    print("\n1. Delete songs by range")
+
+    if DRY_RUN:
+        print("\n              *** DRY RUN MODE ***")
+        print("              NO CHANGES WILL BE MADE")
+    else:
+        print("\n              LIVE MODE")
+        print("              Playlist changes are enabled")
+
+    print("\n" + "-" * 72)
+    print("PLAYLIST OPERATIONS")
+    print("-" * 72)
+    print("1. Delete songs by range")
     print("2. Delete songs between two song names")
     print("3. Delete specific songs by number")
     print("4. Delete song by name")
     print("5. Remove EVERYTHING after a song")
-    print("6. Search songs")
-    print("7. Show first 25 songs")
     print("8. Merge two playlists")
     print("9. Delete ENTIRE playlist")
+
+    print("\n" + "-" * 72)
+    print("BROWSE")
+    print("-" * 72)
+    print("6. Search songs")
+    print("7. Show first 25 songs")
+
+    print("\n" + "-" * 72)
+    print("BACKUP & RESTORE")
+    print("-" * 72)
     print("10. List backups")
     print("11. Preview backup")
     print("12. Create manual backup")
     print("13. Restore backup")
+
+    print("\n" + "-" * 72)
     print("0. Exit")
     print("-" * 72)
-
 
 def run_with_playlist(yt, task):
     playlist = select_playlist(yt)
