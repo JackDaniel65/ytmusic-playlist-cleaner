@@ -1,0 +1,13 @@
+{
+  "headers": {
+    "authorization": "YOUR_AUTHORIZATION",
+    "cookie": "YOUR_COOKIE",
+    "user-agent": "YOUR_USER_AGENT",
+    "x-goog-authuser": "0",
+    "x-goog-visitor-id": "YOUR_X_GOOG_VISITOR_ID",
+    "x-origin": "https://music.youtube.com",
+    "x-youtube-bootstrap-logged-in": "true",
+    "x-youtube-client-name": "67",
+    "x-youtube-client-version": "YOUR_CLIENT_VERSION"
+  }
+}

@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+browser.json
+browser_clean.json
+.env
+.env.*
+.DS_Store
+.vscode/
+.idea/
+.pytest_cache/
