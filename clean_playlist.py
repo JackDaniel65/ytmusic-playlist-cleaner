@@ -593,6 +593,106 @@ def delete_after_song(yt, playlist_id, tracks):
     pause()
 
 
+def delete_full_playlist(yt, playlist):
+    playlist_id = playlist["playlistId"]
+    title = playlist.get("title", "Untitled")
+
+    print("\n" + "=" * 72)
+    print("                    DELETE ENTIRE PLAYLIST")
+    print("=" * 72)
+    print(f"\nPlaylist: {title}")
+    print("\nTHIS WILL PERMANENTLY DELETE THE ENTIRE PLAYLIST.")
+    print("This cannot be undone.")
+    print("-" * 72)
+
+    typed = input("\nType the exact playlist name to confirm: ").strip()
+
+    if typed != title:
+        print("\nName did not match. Cancelled.")
+        pause()
+        return False
+
+    try:
+        yt.delete_playlist(playlist_id)
+        print(f"\nSUCCESS: '{title}' has been deleted.")
+        pause()
+        return True
+    except Exception as e:
+        print("\nERROR while deleting playlist:")
+        print(type(e).__name__, str(e))
+        pause()
+        return False
+
+
+def merge_playlists(yt, playlist_id, tracks):
+    print("\n" + "=" * 72)
+    print("                       MERGE PLAYLISTS")
+    print("=" * 72)
+    print("\nSelect the SOURCE playlist to merge INTO the current one.")
+    pause()
+
+    source = select_playlist(yt)
+
+    if source is None:
+        return
+
+    source_id = source["playlistId"]
+
+    if source_id == playlist_id:
+        print("\nCannot merge a playlist into itself.")
+        pause()
+        return
+
+    print(f"\nFetching songs from '{source.get('title', 'Untitled')}'...")
+    _, source_tracks = fetch_playlist(yt, source_id)
+
+    if not source_tracks:
+        print("\nSource playlist has no songs (or failed to load).")
+        pause()
+        return
+
+    existing_ids = {t.get("videoId") for t in tracks if t.get("videoId")}
+
+    video_ids = [
+        t["videoId"] for t in source_tracks
+        if t.get("videoId") and t["videoId"] not in existing_ids
+    ]
+
+    skipped = len(source_tracks) - len(video_ids)
+
+    print(f"\n{len(video_ids)} song(s) will be added.")
+    if skipped:
+        print(f"{skipped} song(s) skipped (already in target playlist).")
+
+    if not video_ids:
+        print("\nNothing to merge.")
+        pause()
+        return
+
+    answer = input("\nType MERGE to confirm: ").strip()
+
+    if answer != "MERGE":
+        print("\nCancelled.")
+        pause()
+        return
+
+    try:
+        for start in range(0, len(video_ids), DELETE_BATCH_SIZE):
+            batch = video_ids[start:start + DELETE_BATCH_SIZE]
+            yt.add_playlist_items(playlist_id, batch)
+            done = min(start + len(batch), len(video_ids))
+            print(f"  Added {done}/{len(video_ids)}")
+            if done < len(video_ids):
+                time.sleep(0.5)
+
+        print("\nSUCCESS: Playlists merged.")
+    except Exception as e:
+        print("\nERROR while merging playlists:")
+        print(type(e).__name__, str(e))
+
+    pause()
+
+
 def show_search( tracks):
     query = input("\nSearch song name: ").strip()
 
@@ -643,94 +743,90 @@ def show_playlist(playlist, tracks):
 # MAIN MENU
 # ============================================================
 
-def playlist_menu(yt, playlist):
+def print_main_menu():
+    print("\n" + "=" * 72)
+    print("                 YOUTUBE MUSIC PLAYLIST CLEANER")
+    print("=" * 72)
+    print("\n1. Delete songs by range")
+    print("2. Delete songs between two song names")
+    print("3. Delete specific songs by number")
+    print("4. Delete song by name")
+    print("5. Remove EVERYTHING after a song")
+    print("6. Search songs")
+    print("7. Show first 25 songs")
+    print("8. Merge two playlists")
+    print("9. Delete ENTIRE playlist")
+    print("0. Exit")
+    print("-" * 72)
+
+
+def run_with_playlist(yt, task):
+    playlist = select_playlist(yt)
+
+    if playlist is None:
+        return
+
     playlist_id = playlist["playlistId"]
 
-    while True:
-        result, tracks = fetch_playlist(yt, playlist_id)
+    result, tracks = fetch_playlist(yt, playlist_id)
 
-        if tracks is None:
-            pause()
-            return
+    if tracks is None:
+        pause()
+        return
 
-        clear_screen()
+    clear_screen()
+    title = result.get("title", playlist.get("title", "Untitled"))
+    print("=" * 72)
+    print(f"Playlist : {title}")
+    print(f"Songs    : {len(tracks)}")
+    print("=" * 72)
 
-        title = result.get(
-            "title",
-            playlist.get("title", "Untitled"),
-        )
+    if task == "1":
+        delete_range(yt, playlist_id, tracks)
+    elif task == "2":
+        delete_between_songs(yt, playlist_id, tracks)
+    elif task == "3":
+        delete_specific_positions(yt, playlist_id, tracks)
+    elif task == "4":
+        delete_by_name(yt, playlist_id, tracks)
+    elif task == "5":
+        delete_after_song(yt, playlist_id, tracks)
+    elif task == "6":
+        show_search(tracks)
+    elif task == "7":
+        show_playlist(playlist, tracks)
+    elif task == "8":
+        merge_playlists(yt, playlist_id, tracks)
 
-        print("=" * 72)
-        print("                 YOUTUBE MUSIC PLAYLIST CLEANER")
-        print("=" * 72)
-        print(f"\nPlaylist : {title}")
-        print(f"Songs    : {len(tracks)}")
 
-        print("\n" + "-" * 72)
-        print("1. Delete songs by range")
-        print("2. Delete songs between two song names")
-        print("3. Delete specific songs by number")
-        print("4. Delete song by name")
-        print("5. Remove EVERYTHING after a song")
-        print("6. Search songs")
-        print("7. Show first 25 songs")
-        print("8. Refresh playlist")
-        print("9. Back to playlist selection")
-        print("0. Exit")
-        print("-" * 72)
+def run_delete_full_playlist(yt):
+    playlist = select_playlist(yt)
 
-        choice = input("\nChoice: ").strip()
+    if playlist is None:
+        return
 
-        if choice == "1":
-            delete_range(yt, playlist_id, tracks)
-
-        elif choice == "2":
-            delete_between_songs(yt, playlist_id, tracks)
-
-        elif choice == "3":
-            delete_specific_positions(yt, playlist_id, tracks)
-
-        elif choice == "4":
-            delete_by_name(yt, playlist_id, tracks)
-
-        elif choice == "5":
-            delete_after_song(yt, playlist_id, tracks)
-
-        elif choice == "6":
-            show_search(tracks)
-
-        elif choice == "7":
-            show_playlist(playlist, tracks)
-
-        elif choice == "8":
-            continue
-
-        elif choice == "9":
-            return
-
-        elif choice == "0":
-            sys.exit(0)
-
-        else:
-            print("\nInvalid choice.")
-            time.sleep(1)
+    delete_full_playlist(yt, playlist)
 
 
 def main():
-    print("=" * 72)
-    print("             YOUTUBE MUSIC PLAYLIST CLEANER")
-    print("=" * 72)
-
     yt = load_ytmusic()
 
     while True:
-        playlist = select_playlist(yt)
+        clear_screen()
+        print_main_menu()
 
-        if playlist is None:
+        choice = input("\nChoice: ").strip()
+
+        if choice in {"1", "2", "3", "4", "5", "6", "7", "8"}:
+            run_with_playlist(yt, choice)
+        elif choice == "9":
+            run_delete_full_playlist(yt)
+        elif choice == "0":
             print("\nGoodbye.")
-            return
-
-        playlist_menu(yt, playlist)
+            sys.exit(0)
+        else:
+            print("\nInvalid choice.")
+            time.sleep(1)
 
 
 if __name__ == "__main__":
