@@ -318,6 +318,412 @@ def create_playlist_backup(yt, playlist_id, playlist=None, tracks=None):
         return False
 
 
+def create_manual_backup(yt):
+    playlist = select_playlist(yt)
+    if playlist is None:
+        return
+
+    playlist_id = playlist["playlistId"]
+    result, tracks = fetch_playlist(yt, playlist_id)
+
+    if tracks is None:
+        pause()
+        return
+
+    backup = create_playlist_backup(
+        yt,
+        playlist_id,
+        playlist=result or playlist,
+        tracks=tracks,
+    )
+
+    if backup is not False and backup is not None:
+        print("\nManual backup completed successfully.")
+
+    pause()
+
+
+def list_backups():
+    backup_dir = Path("backups")
+
+    if not backup_dir.exists():
+        print("\nNo backups found.")
+        pause()
+        return []
+
+    files = sorted(
+        backup_dir.glob("*.json"),
+        key=lambda x: x.stat().st_mtime,
+        reverse=True,
+    )
+
+    if not files:
+        print("\nNo backups found.")
+        pause()
+        return []
+
+    print("\n" + "=" * 72)
+    print("                         PLAYLIST BACKUPS")
+    print("=" * 72)
+
+    valid = []
+
+    for index, path in enumerate(files, 1):
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            title = data.get("title", "Unknown")
+            timestamp = data.get("timestamp", "Unknown")
+            tracks = data.get("tracks", [])
+
+            print(f"\n{index}. {title}")
+            print(f"   Songs     : {len(tracks)}")
+            print(f"   Created   : {timestamp}")
+            print(f"   File      : {path.name}")
+
+            valid.append(path)
+
+        except (OSError, json.JSONDecodeError, TypeError):
+            print(f"\n{index}. INVALID BACKUP")
+            print(f"   File      : {path.name}")
+
+    pause()
+    return valid
+
+
+def preview_backup():
+    backup_dir = Path("backups")
+
+    if not backup_dir.exists():
+        print("\nNo backups found.")
+        pause()
+        return
+
+    files = sorted(
+        backup_dir.glob("*.json"),
+        key=lambda x: x.stat().st_mtime,
+        reverse=True,
+    )
+
+    valid = []
+
+    for path in files:
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            if isinstance(data, dict) and isinstance(data.get("tracks"), list):
+                valid.append((path, data))
+
+        except (OSError, json.JSONDecodeError, TypeError):
+            continue
+
+    if not valid:
+        print("\nNo valid backups found.")
+        pause()
+        return
+
+    print("\n" + "=" * 72)
+    print("                       BACKUP PREVIEW")
+    print("=" * 72)
+
+    for index, (path, data) in enumerate(valid, 1):
+        print(f"\n{index}. {data.get("title", "Unknown")}")
+        print(f"   Songs   : {len(data.get("tracks", []))}")
+        print(f"   Created : {data.get("timestamp", "Unknown")}")
+        print(f"   File    : {path.name}")
+
+    choice = input("\nSelect backup number (or C to cancel): ").strip()
+
+    if choice.lower() == "c":
+        print("\nCancelled.")
+        return
+
+    if not choice.isdigit():
+        print("\nInvalid selection.")
+        pause()
+        return
+
+    index = int(choice)
+
+    if index < 1 or index > len(valid):
+        print("\nInvalid selection.")
+        pause()
+        return
+
+    path, data = valid[index - 1]
+    tracks = data.get("tracks", [])
+
+    print("\n" + "-" * 72)
+    print(f"BACKUP: {data.get("title", "Unknown")}")
+    print(f"CREATED: {data.get("timestamp", "Unknown")}")
+    print(f"SONGS: {len(tracks)}")
+    print("-" * 72)
+
+    for pos, song in enumerate(tracks[:25], 1):
+        print_song(song, pos)
+
+    if len(tracks) > 25:
+        print(f"\n... and {len(tracks) - 25} more.")
+
+    pause()
+
+
+def choose_backup():
+    backup_dir = Path("backups")
+
+    if not backup_dir.exists():
+        print("\nNo valid backups found.")
+        pause()
+        return None
+
+    files = sorted(
+        backup_dir.glob("*.json"),
+        key=lambda x: x.stat().st_mtime,
+        reverse=True,
+    )
+
+    valid = []
+
+    for path in files:
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            if (
+                isinstance(data, dict)
+                and isinstance(data.get("playlistId"), str)
+                and isinstance(data.get("tracks"), list)
+            ):
+                valid.append((path, data))
+
+        except (OSError, json.JSONDecodeError, TypeError):
+            continue
+
+    if not valid:
+        print("\nNo valid backups found.")
+        pause()
+        return None
+
+    print("\n" + "=" * 72)
+    print("                         SELECT BACKUP")
+    print("=" * 72)
+
+    for index, (path, data) in enumerate(valid, 1):
+        tracks = data.get("tracks", [])
+
+        print(f"\n{index}. {data.get('title', 'Unknown')}")
+        print(f"   Songs   : {len(tracks)}")
+        print(f"   Created : {data.get('timestamp', 'Unknown')}")
+        print(f"   File    : {path.name}")
+
+        if tracks:
+            print("   Contains:")
+
+            for song in tracks[:5]:
+                print(f"     - {song.get('title', 'Unknown title')}")
+
+            if len(tracks) > 5:
+                print(f"     ... and {len(tracks) - 5} more")
+
+    choice = input("\nSelect backup number (or C to cancel): ").strip()
+
+    if choice.lower() == "c":
+        print("\nCancelled.")
+        return None
+
+    if not choice.isdigit():
+        print("\nInvalid selection.")
+        pause()
+        return None
+
+    index = int(choice)
+
+    if index < 1 or index > len(valid):
+        print("\nInvalid selection.")
+        pause()
+        return None
+
+    return valid[index - 1]
+
+
+def restore_backup(yt):
+    selected = choose_backup()
+
+    if selected is None:
+        return False
+
+    backup_path, backup_data = selected
+
+    backup_playlist_id = backup_data.get("playlistId")
+    backup_title = backup_data.get("title", "Unknown")
+    backup_tracks = backup_data.get("tracks", [])
+
+    if not backup_playlist_id:
+        print("\nERROR: Backup has no playlist ID.")
+        pause()
+        return False
+
+    valid_tracks = [
+        song for song in backup_tracks
+        if song.get("videoId")
+    ]
+
+    if not valid_tracks:
+        print("\nERROR: Backup contains no restorable songs.")
+        pause()
+        return False
+
+    print("\n" + "=" * 72)
+    print("                         RESTORE BACKUP")
+    print("=" * 72)
+
+    print(f"\nBackup : {backup_title}")
+    print(f"Songs  : {len(valid_tracks)}")
+    print(f"File   : {backup_path.name}")
+
+    print("\nFetching current playlist...")
+
+    current_playlist, current_tracks = fetch_playlist(
+        yt,
+        backup_playlist_id,
+    )
+
+    if current_tracks is None:
+        print("\nERROR: Could not read the current playlist.")
+        pause()
+        return False
+
+    current_title = (
+        current_playlist.get("title", backup_title)
+        if current_playlist
+        else backup_title
+    )
+
+    print("\n" + "-" * 72)
+    print("RESTORE SUMMARY")
+    print("-" * 72)
+    print(f"Playlist        : {current_title}")
+    print(f"Current songs   : {len(current_tracks)}")
+    print(f"Backup songs    : {len(valid_tracks)}")
+    print("-" * 72)
+
+    if DRY_RUN:
+        print("\nDRY RUN: Restore operation selected.")
+        print("NO CHANGES HAVE BEEN MADE.")
+        pause()
+        return True
+
+    print("\nTHIS WILL REPLACE THE CURRENT PLAYLIST CONTENTS.")
+    print("A safety backup will be created before anything is removed.")
+    print("The backup contents shown above will be restored.")
+    print("-" * 72)
+
+    answer = input("\nType RESTORE to confirm: ").strip()
+
+    if answer.upper() != "RESTORE":
+        print("\nCancelled.")
+        pause()
+        return False
+
+    safety_backup = create_playlist_backup(
+        yt,
+        backup_playlist_id,
+        playlist=current_playlist,
+        tracks=current_tracks,
+    )
+
+    if safety_backup is False:
+        print("\nRestore cancelled because the safety backup failed.")
+        pause()
+        return False
+
+    removable_items = []
+
+    for song in current_tracks:
+        video_id = song.get("videoId")
+        set_video_id = song.get("setVideoId")
+
+        if video_id and set_video_id:
+            removable_items.append({
+                "videoId": video_id,
+                "setVideoId": set_video_id,
+            })
+
+    restore_video_ids = [
+        song["videoId"]
+        for song in valid_tracks
+    ]
+
+    try:
+        if removable_items:
+            print(f"\nRemoving {len(removable_items)} current song(s)...")
+
+            for start in range(
+                0,
+                len(removable_items),
+                DELETE_BATCH_SIZE,
+            ):
+                batch = removable_items[
+                    start:start + DELETE_BATCH_SIZE
+                ]
+
+                yt.remove_playlist_items(
+                    backup_playlist_id,
+                    batch,
+                )
+
+                done = min(
+                    start + len(batch),
+                    len(removable_items),
+                )
+
+                print(
+                    f"  Removed {done}/{len(removable_items)}"
+                )
+
+                if done < len(removable_items):
+                    time.sleep(0.5)
+
+        print(f"\nAdding {len(restore_video_ids)} backup song(s)...")
+
+        for start in range(
+            0,
+            len(restore_video_ids),
+            DELETE_BATCH_SIZE,
+        ):
+            batch = restore_video_ids[
+                start:start + DELETE_BATCH_SIZE
+            ]
+
+            yt.add_playlist_items(
+                backup_playlist_id,
+                batch,
+            )
+
+            done = min(
+                start + len(batch),
+                len(restore_video_ids),
+            )
+
+            print(
+                f"  Added {done}/{len(restore_video_ids)}"
+            )
+
+            if done < len(restore_video_ids):
+                time.sleep(0.5)
+
+        print("\nSUCCESS: Playlist restored from backup.")
+        return True
+
+    except Exception as e:
+        print("\nERROR while restoring playlist:")
+        print(type(e).__name__, str(e))
+        print("\nThe safety backup can be used to recover the previous state.")
+        return False
+
+
 def perform_delete(yt, playlist_id, songs):
     if DRY_RUN:
         print(f"\nDRY RUN: Would remove {len(songs)} song(s).")
@@ -849,6 +1255,10 @@ def print_main_menu():
     print("7. Show first 25 songs")
     print("8. Merge two playlists")
     print("9. Delete ENTIRE playlist")
+    print("10. List backups")
+    print("11. Preview backup")
+    print("12. Create manual backup")
+    print("13. Restore backup")
     print("0. Exit")
     print("-" * 72)
 
@@ -914,6 +1324,14 @@ def main():
             run_with_playlist(yt, choice)
         elif choice == "9":
             run_delete_full_playlist(yt)
+        elif choice == "10":
+            list_backups()
+        elif choice == "11":
+            preview_backup()
+        elif choice == "12":
+            create_manual_backup(yt)
+        elif choice == "13":
+            restore_backup(yt)
         elif choice == "0":
             print("\nGoodbye.")
             sys.exit(0)
