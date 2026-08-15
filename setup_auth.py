@@ -2,112 +2,48 @@
 
 import json
 import re
-import shlex
 import sys
 from pathlib import Path
 
 OUTPUT = Path("browser.json")
 
-REQUIRED = {
+REQUIRED = [
     "cookie",
     "authorization",
     "user-agent",
-}
+]
 
 
-def add_header(headers, key, value):
-    key = key.strip().lower()
-    value = value.strip()
+def extract_value(text, key):
+    patterns = [
+        # JSON:
+        rf'"{re.escape(key)}"\s*:\s*"((?:\\.|[^"\\])*)"',
+        # Single-quoted Python-style:
+        rf"'{re.escape(key)}'\s*:\s*'((?:\\.|[^'\\])*)'",
+        # Normal HTTP header:
+        rf'(?im)^\s*{re.escape(key)}\s*:\s*(.+?)\s*$',
+    ]
 
-    if not key or not value:
-        return
-
-    # Remove surrounding quotes if present.
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-        value = value[1:-1]
-
-    headers[key] = value
-
-
-def parse_json(text):
-    headers = {}
-
-    try:
-        data = json.loads(text)
-    except Exception:
-        return headers
-
-    if isinstance(data, dict):
-        for key, value in data.items():
-            if isinstance(value, str):
-                add_header(headers, str(key), value)
-
-    return headers
-
-
-def parse_header_lines(text):
-    headers = {}
-
-    for line in text.splitlines():
-        line = line.strip()
-
-        if not line:
-            continue
-
-        # JSON-style:
-        # "user-agent": "Mozilla/5.0 ..."
-        match = re.match(
-            r'^["\']?([^"\':]+)["\']?\s*:\s*["\'](.*)["\']\s*,?$',
-            line,
-        )
+    for pattern in patterns:
+        match = re.search(pattern, text)
 
         if match:
-            add_header(headers, match.group(1), match.group(2))
-            continue
+            value = match.group(1).strip()
 
-        # Normal header:
-        # user-agent: Mozilla/5.0 ...
-        if ":" in line:
-            key, value = line.split(":", 1)
+            if value:
+                return value
 
-            key = key.strip().strip("\"'")
-            value = value.strip().rstrip(",")
-
-            # Skip obvious non-header JSON/debug lines.
-            if key and not key.startswith("{"):
-                add_header(headers, key, value)
-
-    return headers
-
-
-def parse_curl(text):
-    headers = {}
-
-    try:
-        tokens = shlex.split(text)
-    except Exception:
-        return headers
-
-    for i, token in enumerate(tokens):
-        if token in ("-H", "--header") and i + 1 < len(tokens):
-            header = tokens[i + 1]
-
-            if ":" in header:
-                key, value = header.split(":", 1)
-                add_header(headers, key, value)
-
-    return headers
+    return None
 
 
 print("=" * 72)
-print("          YOUTUBE MUSIC AUTHENTICATION SETUP")
+print("       YOUTUBE MUSIC AUTHENTICATION SETUP")
 print("=" * 72)
 print()
-print("Paste the COMPLETE Request Headers here.")
+print("Paste the COMPLETE Request Headers below.")
 print()
-print("Source:")
 print("YouTube Music -> Ctrl+Shift+I -> Network")
-print("-> open your playlist -> browse")
+print("-> open playlist -> browse")
 print("-> /youtubei/v1/browse?prettyPrint=false")
 print("-> Headers -> Request Headers")
 print()
@@ -123,18 +59,45 @@ if not raw.strip():
 
 headers = {}
 
-# 1. Try complete JSON first.
-headers.update(parse_json(raw))
+# Extract required headers directly from the complete pasted text.
+for key in REQUIRED:
+    value = extract_value(raw, key)
 
-# 2. Parse normal / JSON-style header lines.
-headers.update(parse_header_lines(raw))
+    if value:
+        headers[key] = value
 
-# 3. Parse cURL-style headers if present.
-headers.update(parse_curl(raw))
+# Extract additional useful YouTube headers.
+OPTIONAL = [
+    "accept",
+    "accept-encoding",
+    "accept-language",
+    "content-encoding",
+    "content-type",
+    "origin",
+    "priority",
+    "referer",
+    "x-browser-channel",
+    "x-browser-copyright",
+    "x-browser-validation",
+    "x-browser-year",
+    "x-client-data",
+    "x-goog-authuser",
+    "x-goog-visitor-id",
+    "x-origin",
+    "x-youtube-bootstrap-logged-in",
+    "x-youtube-client-name",
+    "x-youtube-client-version",
+]
+
+for key in OPTIONAL:
+    value = extract_value(raw, key)
+
+    if value:
+        headers[key] = value
 
 missing = [
     key for key in REQUIRED
-    if not headers.get(key)
+    if key not in headers
 ]
 
 if missing:
@@ -143,7 +106,7 @@ if missing:
     for key in missing:
         print(f"  - {key}")
 
-    print("\nHeaders detected by the parser:")
+    print("\nThe parser detected these header names:")
 
     if headers:
         for key in sorted(headers):
@@ -151,45 +114,28 @@ if missing:
     else:
         print("  NONE")
 
-    print("\nMake sure you copied Request Headers from:")
+    print("\nMake sure you copied the Request Headers section")
+    print("from:")
     print("/youtubei/v1/browse?prettyPrint=false")
 
     sys.exit(1)
 
-# Keep only actual HTTP headers.
-# This also removes accidental DevTools metadata.
-headers = {
-    key: value
-    for key, value in headers.items()
-    if isinstance(key, str)
-    and isinstance(value, str)
-    and key not in {
-        "decoded",
-        "music.youtube.com",
-    }
-}
-
 with OUTPUT.open("w", encoding="utf-8") as f:
-    json.dump(
-        headers,
-        f,
-        indent=2,
-        ensure_ascii=False,
-    )
+    json.dump(headers, f, indent=2, ensure_ascii=False)
 
 print()
 print("=" * 72)
-print("SUCCESS — browser.json created")
+print("SUCCESS")
 print("=" * 72)
 print()
-print(f"File: {OUTPUT.resolve()}")
-print(f"Headers detected: {len(headers)}")
+print(f"Created: {OUTPUT.resolve()}")
+print(f"Headers saved: {len(headers)}")
 print()
-print("Required authentication headers:")
+print("Authentication detected:")
 print("  cookie        : YES")
 print("  authorization : YES")
 print("  user-agent    : YES")
 print()
-print("browser.json is local-only.")
-print("It is excluded from Git by .gitignore.")
+print("browser.json is LOCAL ONLY.")
+print("It is protected by .gitignore.")
 print()
